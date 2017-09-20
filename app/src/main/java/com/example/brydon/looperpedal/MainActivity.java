@@ -13,44 +13,40 @@ import android.view.MenuItem;
 import android.widget.Button;
 
 import java.io.IOException;
+import java.util.ArrayList;
 
 public class MainActivity extends AppCompatActivity {
 
-    private final String baseFilename = "loopRecord";
-
-    Button recordButton = (Button) findViewById(R.id.recordButton);
+    private String baseFilename;
 
     private int numLoops = 0;
+
+    Button recordButton;
     private boolean recordingFlag = false;
 
-    private MediaRecorder spareRecorder = new MediaRecorder(); //this is done so that a new recorder doesn't have to be allocated when a user presses the button, loop recording is time critical
+    private MediaRecorder spareRecorder = null; //this is done so that a new recorder doesn't have to be allocated when a user presses the button, loop recording is time critical
     private MediaRecorder currentRecorder = null;
 
-    private MediaPlayer[] players = new MediaPlayer[3]; //these are global so that a handle can be kept on them.
-
+    private ArrayList<MediaPlayer> players = new ArrayList<>(); //these are global so that a handle can be kept on them.
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
-
-        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
-        fab.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
-            }
-        });
-        setUpRecorder(spareRecorder); //setup the initial spare recorder
+        spareRecorder = new MediaRecorder();
+        System.out.println("setup recorder returned" + setUpRecorder(spareRecorder)); //setup the initial spare recorder
+        players.add(new MediaPlayer()); //always keep a spare of these as well.
+        baseFilename = getFilesDir().getAbsolutePath() + "/loopRecord";
+        System.out.println(baseFilename);
+        recordButton = (Button) findViewById(R.id.recordButton);
     }
 
 
     private boolean setUpRecorder(MediaRecorder r){
         r.setAudioSource(MediaRecorder.AudioSource.MIC);
         r.setOutputFormat(MediaRecorder.OutputFormat.DEFAULT); //dont really care
-        r.setOutputFile(getExternalCacheDir().getAbsolutePath() + "/" + baseFilename + (++numLoops));
+        r.setOutputFile(baseFilename + (++numLoops));
         r.setAudioEncoder(MediaRecorder.AudioEncoder.DEFAULT); //still dont care
         try{
             r.prepare();
@@ -61,8 +57,13 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
-    public void playLatest(){ //plays 'loopRecord[numloops]'
-
+    public void play(MediaPlayer p){ //preps and plays p
+        try {
+            p.prepare();
+        } catch(java.io.IOException e){
+            e.printStackTrace();
+        }
+        p.start();
     }
 
     public void restartAll(View view){
@@ -87,10 +88,20 @@ public class MainActivity extends AppCompatActivity {
             setUpRecorder(spareRecorder);
             recordingFlag = true;
         } else{ //we were recording, stop recording
+            //first things first, get the track playing as soon as the button is pressed.
+            MediaPlayer p = players.get(players.size()-1); //the last mediaPlayer in the list is free to use
+            try{
+                p.setDataSource(baseFilename + numLoops);
+            } catch (IOException e){
+                e.printStackTrace();
+            }
+            p.setLooping(true); //make it loop
+            play(p);
             recordButton.setText("Record");
             currentRecorder.stop();
             currentRecorder.release(); //we're done with this one now, we don't need it anymore and we made a new one for next time. This is a spot where this recorder could be updated for a new looper but whatever.
             currentRecorder = null; //can't use it anymore it's been released
+
         }
     }
 
