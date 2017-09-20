@@ -18,8 +18,6 @@ import java.util.ArrayList;
 
 public class MainActivity extends AppCompatActivity {
 
-    private String baseFilename;
-
     private int numLoops = 0;
 
     Button recordButton;
@@ -28,7 +26,7 @@ public class MainActivity extends AppCompatActivity {
     private MediaRecorder spareRecorder = null; //this is done so that a new recorder doesn't have to be allocated when a user presses the button, loop recording is time critical
     private MediaRecorder currentRecorder = null;
 
-    private ArrayList<MediaPlayer> players = new ArrayList<>(); //these are global so that a handle can be kept on them.
+    SoundPlayer player = new SoundPlayer();
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -36,11 +34,9 @@ public class MainActivity extends AppCompatActivity {
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         spareRecorder = new MediaRecorder();
-        players.add(new MediaPlayer()); //always keep a spare of these as well.
-        baseFilename = getFilesDir().getAbsolutePath() + "/loopRecord";
-        System.out.println(baseFilename);
         recordButton = (Button) findViewById(R.id.recordButton);
-        System.out.println("setup recorder returned" + setUpRecorder(spareRecorder)); //setup the initial spare recorder
+//        System.out.println("setup recorder returned" + setUpRecorder(spareRecorder)); //setup the initial spare recorder
+        new Thread(player).start(); //start the player thread
     }
 
 
@@ -48,10 +44,10 @@ public class MainActivity extends AppCompatActivity {
         r.setAudioSource(MediaRecorder.AudioSource.MIC);
         r.setOutputFormat(MediaRecorder.OutputFormat.DEFAULT); //dont really care
         numLoops += 1;
-        r.setOutputFile(baseFilename + (numLoops));
-        r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC); //still dont care
+        r.setOutputFile(SoundPlayer.baseFilename + (numLoops));
+        r.setAudioEncoder(MediaRecorder.AudioEncoder.DEFAULT); //still dont care
         try{
-            System.out.println("Next recording will be in file " + baseFilename + numLoops);
+//            System.out.println("Next recording will be in file " + SoundPlayer.baseFilename + numLoops);
             r.prepare();
         } catch(java.io.IOException e) {
             e.printStackTrace();
@@ -70,28 +66,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void restartAll(View view){
-        for (int i = 0; i < players.size() - 1; ++i){
-            MediaPlayer p = players.get(i);
-            p.seekTo(0);
-            
-        }
+        player.restartAll();
     }
 
     public void clearAll(View view){
-        int i = 0; //the first element
-        while(!players.isEmpty()) {
-            MediaPlayer p = players.get(i);
-            p.stop();
-            p.release();
-            players.remove(i);
-        }
+        player.deleteAll();
     }
 
     public void clearLast(View view){
-        MediaPlayer p = players.get(players.size() - 1);
-        p.stop();
-        p.release();
-        players.remove(players.size()-1);
+        player.deleteMostRecent();
     }
 
     public void toggleRecord(View view){
@@ -102,18 +85,8 @@ public class MainActivity extends AppCompatActivity {
             recordingFlag = true;
         } else{ //we were recording, stop recording
             currentRecorder.stop();
+
             currentRecorder.release(); //we're done with this one now, we don't need it anymore and we made a new one for next time. This is a spot where this recorder could be updated for a new looper but whatever.
-            //first things first, get the track playing as soon as the button is pressed.
-            MediaPlayer p = players.get(players.size()-1); //the last mediaPlayer in the list is free to use
-            try{
-                System.out.println("Trying to play from " + baseFilename+numLoops);
-                p.setDataSource(baseFilename + numLoops);
-            } catch (IOException e){
-                e.printStackTrace();
-            }
-            p.setLooping(true); //make it loop
-            play(p);
-            players.add(new MediaPlayer());
             recordButton.setText("Record");
             currentRecorder = null; //can't use it anymore it's been released
             spareRecorder = new MediaRecorder(); //set up a spare recorder
